@@ -1,0 +1,236 @@
+Ansible level 3
+
+### Day 1: Creating Soft Links Using Ansible
+
+There are two types of linkings.
+
+1. Soft link 
+2. Hard link 
+
+1. Soft Link 
+
+Shortcut of directory. To create soft link of /var/log as shortcutoflog
+
+```bash
+ln -s /var/log /home/tom/desktop/shortcutoflog
+```
+
+If the original directory is deleted, the data in soft link will be also deleted.
+
+1. Hard Link
+
+Shortcut of file. To create hard link of /etc/named.conf as shortcut1
+
+```bash
+ln /etc/named.conf /home/tom/desktop/shortcut1
+```
+
+If the original directory is deleted, the data in hard link is not deleted.
+
+Create 
+
+/opt/itadmin/blog.txt on app server 1
+
+/opt/itadmin/story.txt on app server 2
+
+/opt/itadmin/media.txt on app server 3
+
+Create playbook.yml file
+
+```bash
+---
+- name: Create txt file , change permission and create soft link
+  hosts: all
+  become: true
+  
+  tasks:
+    - name: Create txt file and Change permission in app svr 1
+      ansible.builtin.file:
+        path: /opt/itadmin/blog.txt 
+        state: touch
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+      when: inventory_hostname == "stapp01"
+     
+    - name: Create txt file and Change permission in app svr 2
+      ansible.builtin.file:
+        path: /opt/itadmin/story.txt 
+        state: touch
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+      when: inventory_hostname == "stapp02"
+      
+    - name: Create txt file and Change permission in app svr 3
+      ansible.builtin.file:
+        path: /opt/itadmin/media.txt  
+        state: touch
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+      when: inventory_hostname == "stapp03"
+      
+    - name: Create soft link in all app svr
+      ansible.builtin.file:
+        src: /opt/itadmin
+        dest: /var/www/html
+        state: link
+     
+     
+ Run playbook file
+ ansible-playbook -i inventory playbook.yml
+ 
+
+Check running output
+ansible all -a "ls -al /var/www/html" -i inventory
+
+Expected output
+stapp02 | CHANGED | rc=0 >>
+lrwxrwxrwx 1 root root 12 Jan 20 10:46 /var/www/html -> /opt/itadmin
+stapp03 | CHANGED | rc=0 >>
+lrwxrwxrwx 1 root root 12 Jan 20 10:46 /var/www/html -> /opt/itadmin
+stapp01 | CHANGED | rc=0 >>
+lrwxrwxrwx 1 root root 12 Jan 20 10:46 /var/www/html -> /opt/itadmin
+```
+
+=========================================================
+
+### Day 2: Managing ACLs Using Ansible
+
+```bash
+---
+- name: Create empty files on app svr 1 and configure ACL
+  hosts: stapp01
+  become: true
+
+  tasks:
+    - name: Create an empty file on app svr 1
+      ansible.builtin.file:
+        path: /opt/devops/blog.txt
+        state: touch
+
+    - name: Configure ACL
+      ansible.posix.acl:
+        path: /opt/devops/blog.txt
+        entity: tony
+        etype: group
+        permissions: r
+        state: present
+
+- name: Create empty files on app svr 2 and configure ACL
+  hosts: stapp02
+  become: true
+
+  tasks:
+    - name: Create an empty file on app svr 2
+      ansible.builtin.file:
+        path: /opt/devops/story.txt
+        state: touch
+
+    - name: Configure ACL
+      ansible.posix.acl:
+        path: /opt/devops/story.txt
+        entity: steve
+        etype: user
+        permissions: rw
+        state: present
+
+- name: Create empty files on app svr 3 and configure ACL
+  hosts: stapp03
+  become: true
+
+  tasks:
+    - name: Create an empty file on app svr 3
+      ansible.builtin.file:
+        path: /opt/devops/media.txt
+        state: touch
+
+    - name: Configure ACL
+      ansible.posix.acl:
+        path: /opt/devops/media.txt
+        entity: banner
+        etype: group
+        permissions: rw
+        state: present
+
+Check ansible playbook syntax
+sudo ansible-playbook -i inventory playbook.yml --syntax-check
+```
+
+=========================================================
+
+### Day 4: Ansible Manage Service
+
+```bash
+Create playbook to install vsftpd service 
+
+---
+- name: Install vsftpd service and enable service
+  hosts: all
+  become: true
+
+  tasks:
+    - name: Install vsftpd service
+      ansible.builtin.yum:
+         name: vsftpd
+         state: latest
+
+    - name: Enable and start service
+      ansible.builtin.service:
+         name: vsftpd
+         state: started
+         enabled: true
+
+Check syntax
+ansible-playbook playbook.yml --syntax-check -i inventory
+
+Run playbook file
+ansible-playbook -i inventory playbook.yml
+```
+
+=========================================================
+
+### Day 5: Ansible LineinFile Module
+
+```bash
+Create playbook file
+
+---
+- name: Install httpd service, Enable and Start service, Create file and add content
+  hosts: all
+  become: true
+
+  tasks:
+    - name: Install httpd service
+      ansible.builtin.yum:
+        name: httpd
+        state: latest
+
+    - name: Enable and start service
+      ansible.builtin.service:
+        name: httpd
+        state: started
+        enabled: true
+
+    - name: Create .html file
+      ansible.builtin.copy:
+        dest: /var/www/html/index.html
+        content: 'This is a Nautilus sample file, created using Ansible!'
+
+    - name: Add content
+      ansible.builtin.lineinfile:
+        path: /var/www/html/index.html
+        line: 'Welcome to xFusionCorp Industries!'
+        insertbefore: BOF # Beginning of file
+        owner: apache
+        group: apache
+        mode: '0644'
+        
+Check syntax
+ansible-playbook playbook.yml --syntax-check -i inventory
+
+Run playbook file
+ansible-playbook -i inventory playbook.yml
+```
+
+=========================================================
+
+### Day 6: Ansible Replace Module
