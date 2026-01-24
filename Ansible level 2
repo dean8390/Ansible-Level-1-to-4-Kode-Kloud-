@@ -1,0 +1,227 @@
+Ansible Level 2
+### Day 1: Ansible Ping Module Usage
+
+Check inventory file, there is no ansible_user name
+
+```bash
+thor@jumphost ~/ansible$ cat inventory
+stapp01 ansible_host=172.16.238.10 ansible_ssh_pass=Ir0nM@n
+stapp02 ansible_host=172.16.238.11 ansible_ssh_pass=Am3ric@
+stapp03 ansible_host=172.16.238.12 ansible_ssh_pass=BigGr33n
+
+Add ansible_user name
+
+vi inventory
+
+stapp01 ansible_host=172.16.238.10 ansible_user=tony ansible_ssh_pass=Ir0nM@n
+stapp02 ansible_host=172.16.238.11 ansible_user=steve ansible_ssh_pass=Am3ric@
+stapp03 ansible_host=172.16.238.12 ansible_user=banner ansible_ssh_pass=BigGr33n
+```
+
+Testing ping module
+
+```bash
+ansible stapp02 -i inventory -m ping 
+```
+
+=========================================================
+
+### Day 2: Ansible samba service Install Package
+
+Create inventory file
+
+```bash
+vi inventory
+
+stapp01 ansible_host=172.16.238.10 ansible_user=tony ansible_ssh_pass=Ir0nM@n
+stapp02 ansible_host=172.16.238.11 ansible_user=steve ansible_ssh_pass=Am3ric@
+stapp03 ansible_host=172.16.238.12 ansible_user=banner ansible_ssh_pass=BigGr33n
+```
+
+Create playbook.yml to install samba service
+
+```bash
+---
+- name: Install samba service
+  hosts: all
+  become: yes
+    
+  tasks:
+    - name: Install samba service
+      ansible.builtin.yum:
+        name: samba
+        state: present
+```
+
+Execute playbook with previous created inventory
+
+```bash
+ansible-playbook -i inventory playbook.yml
+```
+
+=========================================================
+
+### Day 3: Ansible Archive Module
+
+Create playbook using archive module
+
+```bash
+---
+- name: Archive /usr/src/data/
+  hosts: all
+  become: true
+  
+  tasks:
+    - name: Archive /usr/src/data to /opt/data/
+      community.general.archive:
+          path: /usr/src/data/
+          dest: /opt/data/blog.tar.gz
+          format: gz
+          force_archive: true
+          owner: "{{ ansible_user }}" # require space between { and ansible_user
+          group: "{{ ansible_user }}" # require space between { and ansible_user
+         
+ #Important Note#
+ Don't use tab key to space
+```
+
+Running playbook file
+
+```bash
+ansible-playbook -i inventory playbook.yml
+```
+
+=========================================================
+
+### Day 4: Ansible Unarchive Module
+
+Create playbook.yml to unarchive zip file
+
+```bash
+---
+- name: Unarchive zip file to all app servers
+  hosts: all
+  become: true
+  
+  tasks:
+    - name: Unarchive zip file to all app servers with specific owner and group
+      ansible.builtin.unarchive:
+        src: /usr/src/itadmin/datacenter.zip
+        dest: /opt/itadmin/
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: '0755'
+        
+ 
+Run playbook file
+ 
+ansible-playbook -i inventory playbook.yml
+ 
+After running playbook file, identify the resutlt
+ 
+ansible all -a "ls -alh /opt/itadmin/" -i inventory
+
+Expected Output
+
+stapp03 | CHANGED | rc=0 >>
+total 12K
+drwxr-xr-x 3 root   root   4.0K Jan 19 17:01 .
+drwxr-xr-x 1 root   root   4.0K Jan 19 16:57 ..
+drwxr-xr-x 2 banner banner 4.0K Jan 19 16:57 unarchive
+stapp01 | CHANGED | rc=0 >>
+total 12K
+drwxr-xr-x 3 root root 4.0K Jan 19 17:01 .
+drwxr-xr-x 1 root root 4.0K Jan 19 16:57 ..
+drwxr-xr-x 2 tony tony 4.0K Jan 19 16:57 unarchive
+stapp02 | CHANGED | rc=0 >>
+total 12K
+drwxr-xr-x 3 root  root  4.0K Jan 19 17:01 .
+drwxr-xr-x 1 root  root  4.0K Jan 19 16:57 ..
+drwxr-xr-x 2 steve steve 4.0K Jan 19 16:57 unarchive
+```
+
+=========================================================
+
+### Day 5: Ansible Blockinfile Module
+
+```bash
+---
+- name: Install Apache(httpd) service and add content using blockinfile module
+  hosts: all
+  become: yes
+  
+  tasks: 
+    - name: Intall Apache(httpd) service
+      ansible.builtin.yum:
+        name: httpd
+        state: present
+        
+    - name: Enable and start httpd service
+      ansible.builtin.service:
+        name: httpd
+        state: started
+        enabled: true
+        
+    - name: Add content using blockinfile module
+      ansible.builtin.blockinfile:
+        path: /var/www/html/index.html
+        create: true
+        block: |
+           Welcome to XfusionCorp!
+
+					 This is  Nautilus sample file, created using Ansible!
+
+					 Please do not modify this file manually!
+				owner: apache
+				group: apache
+				mode: '0777'
+
+Checking playbook.yml file has syntax error or not
+
+ansible-playbook -i inventory playbook.yml --syntax-check
+
+Expected output
+playbook: playbook.yml
+
+===============================================
+Running playbook file
+
+ansible-playbook -i inventory playbook.yml
+
+Expected output
+
+PLAY [Install Apache(httpd) service and add content using blockinfile module] *******
+
+TASK [Gathering Facts] **************************************************************
+ok: [stapp01]
+ok: [stapp03]
+ok: [stapp02]
+
+TASK [Intall Apache(httpd) service] *************************************************
+ok: [stapp03]
+ok: [stapp02]
+ok: [stapp01]
+
+TASK [Enable and start httpd service] ***********************************************
+ok: [stapp02]
+ok: [stapp03]
+ok: [stapp01]
+
+TASK [Add content using blockinfile module] *****************************************
+changed: [stapp01]
+changed: [stapp03]
+changed: [stapp02]
+
+PLAY RECAP **************************************************************************
+stapp01                    : ok=4    changed=1    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+stapp02                    : ok=4    changed=1    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+stapp03                    : ok=4    changed=1    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0  
+
+=========================================================
+
+Identify the result
+
+ansible all -a "cat /var/www/html/index.html" -i inventory
+```
+
+=========================================================
