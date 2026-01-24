@@ -1,0 +1,166 @@
+Ansible level 1
+
+### Day:1 Troubleshoot and Create Ansible Playbook
+
+```bash
+Edit Inventory file <hostname , IP , username and password>
+thor@jumphost ~/ansible$ cat inventory
+stapp01 ansible_host=172.16.238.10 ansible_user=tony ansible_password=Ir0nM@n ansible_ssh_common_args='-o StrictHostKeyChecking=no'
+
+Create playbook.yml file to create empty file
+thor@jumphost ~/ansible$ sudo vi playbook.yml
+- name: create an empty file
+  hosts: stapp01
+  tasks:
+    - name: create an empty file
+      ansible.builtin.file:
+       path: /tmp/file.txt
+       state: touch
+
+```
+
+=========================================================
+
+### Day 2: Create Ansible Inventory for App Server Testing
+
+Create inventory file for representative server
+
+```bash
+sudo vi /home/thor/ansible/inventory # INI style
+
+[app_servers]
+stapp01 ansible_host=172.16.238.10 ansible_user=tony ansible_ssh_pass=Ir0nM@n
+
+```
+
+=========================================================
+
+### Day 3: Configure Default SSH User for Ansible
+
+```bash
+sudo vi /etc/ansible/ansible.cfg
+
+input under host_key_checking = False
+
+remote_user = john
+```
+
+=========================================================
+
+### Day 4: Copy Data to App Server using Ansible
+
+Create inventory file under /home/thor/ansible/inventory
+
+```jsx
+vi /home/thor/ansible/inventory
+
+add Application server
+
+[App Server]
+stapp01 ansible_host=172.16.238.10 ansible_user=tony ansible_password='Ir0nM@n'
+stapp02 ansible_host=172.16.238.11 ansible_user=steve ansible_password='Am3ric@'
+stapp03 ansible_host=172.16.238.12 ansible_user=banner ansible_password='BigGr33n'
+```
+
+Test inventory file is working or not
+
+```jsx
+thor@jumphost ~/ansible$ ansible App_Server -m ping -i inventory
+
+expected output
+
+stapp01 | SUCCESS => {
+    "ansible_facts": {
+        "discovered_interpreter_python": "/usr/bin/python3"
+    },
+    "changed": false,
+    "ping": "pong"
+}
+stapp02 | SUCCESS => {
+    "ansible_facts": {
+        "discovered_interpreter_python": "/usr/bin/python3"
+    },
+    "changed": false,
+    "ping": "pong"
+}
+stapp03 | SUCCESS => {
+    "ansible_facts": {
+        "discovered_interpreter_python": "/usr/bin/python3"
+    },
+    "changed": false,
+    "ping": "pong"
+}
+```
+
+Create playbook.yml to copy data to App server
+
+```jsx
+vi /home/thor/ansible/playbook.yml
+
+---
+ - name: Copy Data to App Server
+   hosts: App_Server
+   become: yes
+   tasks:
+    - name: Copy Data to App Server
+      ansible.builtin.copy:
+         src: /usr/src/security/index.html
+         dest: /opt/security/
+         remote_src: no                   
+```
+
+Running Playbook
+
+```jsx
+ ansible-playbook -i inventory playbook.yml 
+```
+
+=========================================================
+
+### Day 5: Create Files on App Servers using Ansible
+
+Create inventory file
+
+```bash
+[App_Server]
+stapp01 ansible_host=172.16.238.10 ansible_user=tony ansible_password='Ir0nM@n'
+stapp02 ansible_host=172.16.238.11 ansible_user=steve ansible_password='Am3ric@'
+stapp03 ansible_host=172.16.238.12 ansible_user=banner ansible_password='BigGr33n'
+```
+
+Create file on all app server
+
+playbook.yml file
+
+```bash
+---
+- name: Create a blank file
+  hosts: App_Server
+  become: true
+    
+    tasks:
+     - name: Create a blank file
+       ansible.builtin.file:
+           path: /home/nfsdata.txt
+           state: touch
+           mode: '0644'
+           owner: "{{ansible_user}}" # ansible_user is from above inventory file
+           group: "{{ansible_user}}" # ansible_user is from above inventory file
+```
+
+---
+
+Testing playbook is working or not
+
+```bash
+ansible App_Server -i inventory -a "ls -alh /homenfsdata.txt"
+
+Expected Output
+
+stapp01 | CHANGED | rc=0 >>
+-rw-r--r-- 1 tony tony 0 Jan 16 06:19 /home/nfsdata.txt
+stapp03 | CHANGED | rc=0 >>
+-rw-r--r-- 1 banner banner 0 Jan 16 06:19 /home/nfsdata.txt
+stapp02 | CHANGED | rc=0 >>
+-rw-r--r-- 1 steve steve 0 Jan 16 06:19 /home/nfsdata.txt
+```
