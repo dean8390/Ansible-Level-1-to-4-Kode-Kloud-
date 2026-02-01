@@ -1,0 +1,285 @@
+Ansiblel level 4
+
+### Day 1: Ansible Facts Gathering
+
+```bash
+Fact Gathering is automatically enabled in builtin moudle
+
+---
+- name: Setup Apache and system facts page
+  hosts: all
+  become: true
+  gather_facts: yes
+
+  tasks:
+    - name: Create facts.txt with system architecture
+      ansible.builtin.blockinfile:
+        path: /root/facts.txt
+        create: yes
+        block: |
+          Ansible managed node architecture is {{ ansible_architecture }}
+
+    - name: Install httpd package
+      ansible.builtin.yum:
+        name: httpd
+        state: present
+
+    - name: Copy facts.txt to Apache web root as index.html
+      ansible.builtin.copy:
+        src: /root/facts.txt
+        dest: /var/www/html/index.html
+        remote_src: yes
+
+    - name: Start and enable httpd service
+      ansible.builtin.service:
+        name: httpd
+        state: started
+        enabled: yes
+        
+ Check ansible syntex
+ sudo ansible-playbook -i inventory index.yml --syntax-check
+ 
+ Running playbook file
+ sudo ansible-playbook -i inventory index.yml
+ 
+ Checking result
+ curl http://stapp01
+```
+
+=========================================================
+
+### Day 2: Create User and Group using Ansible
+
+```bash
+Create add_users.yml file (playbook file)
+
+---
+- name: Add users and groups on App Server 1
+  hosts: stapp01
+  become: yes
+  vars_files:
+    - data/users.yml
+
+  tasks:
+    - name: Create groups
+      ansible.builtin.group:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - admins
+        - developers
+
+    - name: Create admin users
+      ansible.builtin.user:
+        name: "{{ item }}"
+        groups: admins,wheel
+        append: yes
+        password: "{{ 'dCV3szSGNA' | password_hash('sha512') }}"
+        state: present
+      loop: "{{ admins }}"
+
+    - name: Create developer users
+      ansible.builtin.user:
+        name: "{{ item }}"
+        groups: developers
+        append: yes
+        home: /var/www
+        create_home: yes
+        password: "{{ 'TmPcZjtRQx' | password_hash('sha512') }}"
+        state: present
+      loop: "{{ developers }}"
+
+---------------------------------------------
+There is one module file /data/user.yml
+
+admins:
+  - devid
+  - john
+
+developers:
+  - alex
+  - steve
+
+---------------------------------------------
+
+What the Vault password actually does
+In your task:
+Real passwords:
+Developers → TmPcZjtRQx
+Admins → dCV3szSGNA
+
+These passwords must NOT be stored in plain text
+Ansible Vault is used to encrypt them
+The file: ~/playbooks/secrets/vault.txt is used to unlock encrypted variables.
+Allow Ansible to read passwords during playbook execution.
+
+Run Ansible file
+ansible-playbook add_users.yml --vault-password-file secrets/vault.txt
+```
+
+=========================================================
+
+### Day 3: Managing Jinja2 Templates Using Ansible
+
+Add host information in playbook.yml
+
+```bash
+hosts: stapp02
+```
+
+Create a jinja2 template
+
+```bash
+vi /home/thor/ansible/role/httpd/templates/index.html.j2
+
+Add below line.
+
+This file was created using Ansible on {{ inventory_hostname}} # (for example This file was created using Ansible on stapp01 in case of App Server 1). 
+```
+
+Add a task inside `/home/thor/ansible/role/httpd/tasks/main.yml` to copy this template on `App Server 2` under `/var/www/html/index.html`.
+
+```bash
+---
+# tasks file for role/test
+
+- name: install the latest version of HTTPD
+  yum:
+    name: httpd
+    state: latest
+
+- name: Start service httpd
+  service:
+    name: httpd
+    state: started
+
+- name: Create index.html file under /var/www/html/
+  ansible.builtin.template:
+    src: /home/thor/ansible/role/httpd/templates/index.html.j2
+    dest: /var/www/html/index.html
+    mode: '0777'
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"                           
+```
+
+Check ansible Syntax 
+
+```bash
+ansible-playbook -i inventory playbook.yml --syntax-check
+
+Running Ansible file
+ansible-playbook -i inventory playbook.yml
+
+Here is the yaml code of playbook file
+---
+- hosts: stapp02
+  become: yes
+  become_user: root
+  roles:
+    - role/httpd
+```
+
+Checking result
+
+```bash
+curl http://stapp02
+
+Expected output
+This file was created using Ansible on stapp02
+```
+
+=========================================================
+
+### Day 4: Ansible Setup Httpd and PHP
+
+Create httpd.yml
+
+```bash
+---
+- name: Setup HTTPD and PHP on App Server 3
+  hosts: stapp03
+  become: yes
+  tasks:
+
+    - name: Install latest version of httpd and php
+      package:
+        name:
+          - httpd
+          - php
+        state: latest
+     
+    - name: Replace default DocumentRoot in httpd.conf
+      replace:
+        path: /etc/httpd/conf/httpd.conf
+        regexp: DocumentRoot \"\/var\/www\/html\"
+        replace: DocumentRoot "/var/www/html/myroot"
+
+    - name: If non-existent, create the new DocumentRoot directory 
+      file:
+        path: /var/www/html/myroot
+        state: directory
+        owner: apache
+        group: apache
+
+    - name: Generate phpinfo.php
+      template:
+        src: /home/thor/playbooks/templates/phpinfo.php.j2
+        dest: /var/www/html/myroot/phpinfo.php
+        owner: apache
+        group: apache
+
+    - name: Start and enable service httpd
+      service:
+        name: httpd
+        state: started
+        enabled: yes 
+```
+
+Checking result
+
+```bash
+ansible stapp03 -i inventory -m shell -a "systemctl status httpd"
+```
+
+=========================================================
+
+Day 5: Using Ansible Conditionals
+
+```bash
+---
+- name: Distribute specific files to App Servers based on hostname
+  hosts: all
+  become: yes
+  # We gather facts to ensure ansible_nodename is available
+  gather_facts: yes
+
+  tasks:
+    # Optional: Ensure parent directory exists first
+    - name: Ensure /opt/dba directory exists
+      file:
+        path: /opt/dba
+        state: directory
+        mode: '0755'
+
+    # Task for App Server 1
+    - name: Copy blog.txt to stapp01 with tony ownership
+      copy:
+        src: /usr/src/dba/blog.txt
+        dest: /opt/dba/blog.txt
+        owner: tony
+        group: tony
+        mode: '0755'
+      when: ansible_hostname == 'stapp01'
+      # Notice 'when' is aligned with 'copy', not 'mode'
+
+    # Task for App Server 2
+    - name: Copy story.txt to stapp02 with steve ownership
+      copy:
+        src: /usr/src/dba/story.txt
+        dest: /opt/dba/story.txt
+        owner: steve
+        group: steve
+        mode: '0755'
+      when: ansible_hostname == 'stapp02'
+"playbook.yml" 45L, 1243B
+```
